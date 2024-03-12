@@ -2,6 +2,9 @@ import { defineConfig } from 'vitepress'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
+// Version number
+const versionNumber = process.env.npm_package_version
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   title: "ScaffoldVuer Docs",
@@ -19,6 +22,14 @@ export default defineConfig({
         items: [
           { text: 'Live Demo', link: '/demo' },
           { text: 'API References', link: '/components/ScaffoldVuer' },
+        ]
+      },
+      {
+        text: 'Version',
+        items: [
+          {
+            text: `${versionNumber}`
+          }
         ]
       }
     ],
@@ -50,7 +61,7 @@ export default defineConfig({
           }),
         ],
       }),
-  
+
       // https://github.com/antfu/unocss
       // see unocss.config.ts for config
     ]

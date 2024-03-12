@@ -1,14 +1,16 @@
 # Live demo
 
-<div style="height:720px;width:680px;">
-  <ClientOnly>
-    <ScaffoldVuer style="height:100%;width:100%;"
-      :url="url"
-      :helpMode="helpMode"
-      :displayMarkers="displayMarkers"
-      :displayMinimap="displayMinimap"
-      :minimapSettings="minimapSettings" />
-  </ClientOnly>
+<div class="demo-map-container">
+  <div class="demo-map-container-inner">
+    <ClientOnly>
+      <ScaffoldVuer style="height:100%;width:100%;"
+        :url="url"
+        :helpMode="helpMode"
+        :displayMarkers="displayMarkers"
+        :displayMinimap="displayMinimap"
+        :minimapSettings="minimapSettings" />
+    </ClientOnly>
+  </div>
 </div>
 
 <script setup>
@@ -38,6 +40,35 @@ export default {
   }
 }
 </script>
+
+<style>
+  .demo-map-container {
+    width: 100%;
+    height: 0;
+    padding-bottom: 75%;
+    border: 1px solid var(--vp-c-divider);
+    position: relative;
+    z-index: 1; /* just for demo, to prevent tooltips go out of container */
+    overflow: hidden;
+  }
+
+  .demo-map-container-inner {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+  }
+
+  .bottom-right-control {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .zoomOut,
+  .fitWindow {
+    padding-left: 0px !important;
+  }
+</style>
 
 ## Code Preview
 
