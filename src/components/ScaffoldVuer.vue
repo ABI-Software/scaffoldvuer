@@ -14,9 +14,10 @@
       :visible="tData.visible"
       :x="tData.x"
       :y="tData.y"
-      :annotationDisplay="viewingMode === 'Annotation' && tData.active === true && activeDrawMode === 'Edit'"
+      :annotationDisplay="annotationDisplay"
       @confirm-create="confirmCreate($event)"
       @cancel-create="cancelCreate()"
+      @confirm-delete="confirmDelete($event)"
     />
     <div
       id="organsDisplayArea"
@@ -27,7 +28,7 @@
     />
     <div v-show="displayUI && !isTransitioning">
       <DrawToolbar
-        v-if="viewingMode === 'Annotation' && userInformation"
+        v-if="viewingMode === 'Annotation' && (userInformation || enableLocalAnnotations)"
         :toolbarOptions="toolbarOptions"
         :activeDrawTool="activeDrawTool"
         :activeDrawMode="activeDrawMode"
@@ -388,8 +389,10 @@ import { MapSvgIcon, MapSvgSpriteColor } from "@abi-software/svg-sprite";
 import { DrawToolbar } from '@abi-software/map-utilities'
 import '@abi-software/map-utilities/dist/style.css'
 import {
+  addLabelToObject,
   addUserAnnotationWithFeature,
   annotationFeaturesToPrimitives,
+  getDeletableObjects,
   getDrawnAnnotations,
   getEditableLines,
   getObjectsFromAnnotations,
@@ -664,6 +667,13 @@ export default {
       type: String,
       default: "https://mapcore-demo.org/current/flatmap/v3/"
     },
+    /**
+     * Enable local annotations
+     */
+     enableLocalAnnotations: {
+      type: Boolean,
+      default: false
+    },
   },
   provide() {
     return {
@@ -684,6 +694,7 @@ export default {
         y: 0,
         editingIndex: -1,
         faceIndex: -1,
+        toBeDeleted: false,
       },
       currentTime: 0.0,
       timeVarying: false,
@@ -707,6 +718,7 @@ export default {
         { value: false, refs: 'toolbarPopover', ref: 'editPopover' }, // 9
         { value: false, refs: 'toolbarPopover', ref: 'pointPopover' }, // 10
         { value: false, refs: 'toolbarPopover', ref: 'lineStringPopover' }, // 11
+        { value: false, refs: 'toolbarPopover', ref: 'deletePopover' }, // 11
       ],
       inHelp: false,
       helpModeActiveIndex: this.helpModeInitialIndex,
@@ -768,12 +780,14 @@ export default {
       backgroundIconRef: undefined,
       userInformation: undefined,
       toolbarOptions: [
+        "Delete",
         "Edit",
         "Point",
         "LineString",
       ],
       activeDrawTool: undefined,
       activeDrawMode: undefined,
+      localAnnotationsList: markRaw([])
     };
   },
   watch: {
@@ -880,6 +894,7 @@ export default {
     eventNotifier.subscribe(this, this.eventNotifierCallback);
     this.$module.addNotifier(eventNotifier);
     this.$module.addOrganPartAddedCallback(this.zincObjectAdded);
+    this.$module.addOrganPartRemovedCallback(this.zincObjectRemoved);
     this.$module.initialiseRenderer(this.$refs.display);
     this.toggleRendering(this.render);
     this.ro = new ResizeObserver(this.adjustLayout).observe(
@@ -899,6 +914,10 @@ export default {
   },
   computed: {
     ...mapState(useMainStore,  ['userToken']),
+    annotationDisplay: function() {
+      return this.viewingMode === 'Annotation' && this.tData.active === true &&
+        (this.activeDrawMode === 'Edit' || this.activeDrawMode === 'Delete');
+    }
   },
   methods: {
     /**
@@ -926,6 +945,38 @@ export default {
       //Emit when a new object is added to the scene
       //@arg The object added to the sceene
       this.$emit("zinc-object-added", zincObject);
+    },
+    /**
+     * Internal only.
+     * Remove an entry matching region and group from
+     * local annotation list.
+     */
+    removeFromLocalAnnotationList: function(regionPath, groupName) {
+      for (let i = 0; i < this.localAnnotationsList.length; i++) {
+        const annotation = this.localAnnotationsList[i];
+        if (annotation.region === regionPath &&
+          annotation.group === groupName) {
+          this.localAnnotationsList.splice(i, 1);
+          return;
+        }
+      }
+    },
+    /**
+     * Internal only.
+     * This is called when a zinc object is removed.
+     */
+    zincObjectRemoved: function (zincObject) {
+      if (this.$module.scene) {
+        // zincObjectAdded will be alled in sequential callback
+        const regionPath = zincObject.region.getFullPath() + "/";
+        const groupName = zincObject.groupName;
+        const objects = zincObject.region.findObjectsWithGroupName(groupName, false);
+        //Remove relevant objects from the rest of the app.
+        if (objects.length === 0) {
+          this.$_searchIndex.removeZincObject(zincObject, zincObject.uuid);
+          this.removeFromLocalAnnotationList(regionPath, groupName);
+        }
+      }
     },
     /**
      * Internal only.
@@ -1008,6 +1059,7 @@ export default {
             undefined,
             0x0022ee,
           );
+          addLabelToObject(object.zincObject, this.createData.points[0], payload.group);
         } else if (payload.shape === "LineString") {
           object = this.$module.scene.createLines(
             payload.region,
@@ -1021,13 +1073,21 @@ export default {
               payload.editingIndex);
             const region = this._editingZincObject.region.getFullPath() + "/";
             const group = this._editingZincObject.groupName;
-            addUserAnnotationWithFeature(this.annotator, this.userToken, this._editingZincObject,
+            const annotation = addUserAnnotationWithFeature(this.annotator, this.userToken, this._editingZincObject,
               region, group, this.url, "Position Updated");
           }
         }
         if (object) {
-          addUserAnnotationWithFeature(this.annotator, this.userToken, object.zincObject,
+          const annotation = addUserAnnotationWithFeature(this.annotator, this.userToken, object.zincObject,
             payload.region, payload.group, this.url, "Create");
+          //Store the object in a local list
+          if (this.enableLocalAnnotations) {
+            //Remove previous entry if there is matching region and group
+            this.removeFromLocalAnnotationList(payload.region, payload.group);
+            annotation.group = payload.group;
+            annotation.region = payload.region;
+            this.localAnnotationsList.push(annotation);
+          }
           object.zincObject.isEditable = true;
           this.tData.region = payload.region;
           this.tData.label = payload.group;
@@ -1036,6 +1096,10 @@ export default {
       }
       this.cancelCreate();
     },
+    /**
+     * Internal only.
+     * Cancel create workflows. Reset all relevant UIs and data.
+     */
     cancelCreate: function() {
       this.createData.points.length = 0;
       this.createData.toBeConfirmed = false;
@@ -1043,6 +1107,7 @@ export default {
       this.createData.editingIndex = -1;
       this.createData.faceIndex = -1;
       this.tData.visible = false;
+      this.createData.toBeDeleted = false;
       if (this._tempLine) {
         this.$module.scene.removeTemporaryPrimitive(this._tempLine);
         this._tempLine = undefined;
@@ -1052,6 +1117,25 @@ export default {
         this._tempPoint = undefined;
       }
     },
+    /**
+     * Internal only.
+     * Confirm delete of user created primitive.
+     * This is only called from callback.
+     */
+     confirmDelete: function() {
+      if (this._editingZincObject?.isEditable) {
+        const regionPath = this._editingZincObject.region.getFullPath() + "/";
+        const group = this._editingZincObject.groupName;
+        const annotation = addUserAnnotationWithFeature(this.annotator, this.userToken,
+          this._editingZincObject, regionPath, group, this.url, "Deleted");
+        if (annotation) {
+          const childRegion = this.$module.scene.getRootRegion().
+            findChildFromPath(regionPath);
+          childRegion.removeZincObject(this._editingZincObject);
+        }
+      }
+      this.cancelCreate();
+    },  
     formatTooltip(val) {
       if (this.timeMax >= 1000) {
         if (val) {
@@ -1144,12 +1228,13 @@ export default {
      * @vuese
      */
     toggleDrawing: function (type, icon) {
+      this.createData.toBeDeleted = false;
       if (type === 'mode') {
-        this.activeDrawMode = icon
+        this.activeDrawMode = icon;
         this.createData.shape = '';
         this.$module.selectObjectOnPick = true;
       } else if (type === 'tool') {
-        this.activeDrawTool = icon
+        this.activeDrawTool = icon;
         this.createData.shape = this.activeDrawTool;
         this.$module.selectObjectOnPick = false;
       }
@@ -1239,19 +1324,28 @@ export default {
       }
     },
     drawPoint: function(coords, data) {
-      this.createData.points.length = 0;
-      this.createData.points.push(coords);
-      this.showRegionTooltipWithAnnotations(data, true, true);
-      this.createData.toBeConfirmed = true;
+      if (this.createData.toBeConfirmed === false) {
+        this.createData.points.length = 0;
+        this.createData.points.push(coords);
+        this.showRegionTooltipWithAnnotations(data, true, false);
+        this.tData.x = 50;
+        this.tData.y = 200;
+        this._tempPoint = this.$module.scene.addTemporaryPoints([coords], 0xffff00);
+        this.createData.toBeConfirmed = true;
+      }
     },
     drawLine: function(coords, data) {
-      if (this.createData.points.length === 1) {
-        this.createData.points.push(coords);
-        this.showRegionTooltipWithAnnotations(data, true, true);
-        this.createData.toBeConfirmed = true;
-      } else {
-        this._tempPoint = this.$module.scene.addTemporaryPoints([coords], 0xffff00);
-        this.createData.points.push(coords);
+      if (this.createData.toBeConfirmed === false) {
+        if (this.createData.points.length === 1) {
+          this.createData.points.push(coords);
+          this.showRegionTooltipWithAnnotations(data, true, false);
+          this.tData.x = 50;
+          this.tData.y = 200;
+          this.createData.toBeConfirmed = true;
+        } else {
+          this._tempPoint = this.$module.scene.addTemporaryPoints([coords], 0xffff00);
+          this.createData.points.push(coords);
+        }
       }
     },    
     /**
@@ -1281,7 +1375,8 @@ export default {
       }
     },
     activateAnnotationMode: function(names, event) {
-      if (this.userInformation) {
+      if (this.userInformation || this.enableLocalAnnotations) {
+        this.createData.toBeDeleted = false;
         if ((this.createData.shape !== "") || (this.createData.editingIndex > -1)) {
           // Create new shape bsaed on current settings
           if (names.length > 0) {
@@ -1292,13 +1387,27 @@ export default {
             }
           }
         } else {
-          //Make sure the tooltip is displayed with annotation mode
-          const editing = getEditableLines(event);
-          if (editing) {
-            this.activateEditingMode(editing.zincObject, editing.faceIndex,
-              editing.vertexIndex, editing.point);
+          //Make sure the tooltip is displayed with annotaion mode
+          if (this.activeDrawMode === "Edit") {
+            const editing = getEditableLines(event);
+            if (editing) {
+              this.activateEditingMode(editing.zincObject, editing.faceIndex,
+                editing.vertexIndex, editing.point);
+            }
+          } else if (this.activeDrawMode === "Delete") {
+            const zincObject = getDeletableObjects(event);
+            if (zincObject) {
+              this.createData.toBeDeleted = true;
+              this._editingZincObject = zincObject;
+            }
           }
-          this.showRegionTooltipWithAnnotations(event.identifiers, true, true);
+          if (this.activeDrawMode === "Edit" || this.activeDrawMode === "Delete") {
+            this.showRegionTooltipWithAnnotations(event.identifiers, true, false);
+            this.tData.x = 50;
+            this.tData.y = 200;
+          } else {
+            this.showRegionTooltipWithAnnotations(event.identifiers, true, true);
+          }
         }
       } else {
         this.showRegionTooltipWithAnnotations(event.identifiers, true, true);
@@ -1316,89 +1425,90 @@ export default {
      *
      */
     eventNotifierCallback: function (event) {
-      const names = [];
-      let zincObjects = [];
-      if (event.eventType == 1 || event.eventType == 2) {
-        event.identifiers.forEach((identifier) => {
-          if (identifier) {
-            let id = identifier.data.id
-              ? identifier.data.id
-              : identifier.data.group;
-            names.push(id);
-          }
-        });
-        zincObjects = event.zincObjects;
-      }
-      /*
-       * Event Type 1: Selected
-       * Event Type 2: Highlighted
-       * Event Type 3: Move
-       */
-      if (event.eventType == 1) {
-        if (this.viewingMode === 'Annotation') {
-          this.activateAnnotationMode(names, event);
-
-        } else {
-          if (this.$refs.scaffoldTreeControls) {
-            if (names.length > 0) {
-              //this.$refs.scaffoldTreeControls.changeActiveByNames(names, region, false);
-              this.$refs.scaffoldTreeControls.updateActiveUI(zincObjects);
-              this.updatePrimitiveControls(zincObjects);
-            } else {
-              this.hideRegionTooltip();
-              this.$refs.scaffoldTreeControls.removeActive(false);
+      if (!(this.createData.toBeConfirmed || this.createData.toBeDeleted)) {
+        const names = [];
+        let zincObjects = [];
+        if (event.eventType == 1 || event.eventType == 2) {
+          event.identifiers.forEach((identifier) => {
+            if (identifier) {
+              let id = identifier.data.id
+                ? identifier.data.id
+                : identifier.data.group;
+              names.push(id);
             }
-          }
-          //Emit when an object is selected
-          //@arg Identifier of selected objects
-          this.$emit("scaffold-selected", event.identifiers);
+          });
+          zincObjects = event.zincObjects;
         }
-      } else if (event.eventType == 2) {
-        if (this.selectedObjects.length === 0) {
-          this.hideRegionTooltip();
-          // const offsets = this.$refs.scaffoldContainer.getBoundingClientRect();
-          if (this.$refs.scaffoldTreeControls) {
-            if (names.length > 0) {
-              //this.$refs.scaffoldTreeControls.changeHoverByNames(names, region, false);
-              this.$refs.scaffoldTreeControls.updateHoverUI(zincObjects);
-            } else {
-              this.$refs.scaffoldTreeControls.removeHover(true);
+        /*
+        * Event Type 1: Selected
+        * Event Type 2: Highlighted
+        * Event Type 3: Move
+        */
+        if (event.eventType == 1) {
+          if (this.viewingMode === 'Annotation') {
+            this.activateAnnotationMode(names, event);
+          } else {
+            if (this.$refs.scaffoldTreeControls) {
+              if (names.length > 0) {
+                //this.$refs.scaffoldTreeControls.changeActiveByNames(names, region, false);
+                this.$refs.scaffoldTreeControls.updateActiveUI(zincObjects);
+                this.updatePrimitiveControls(zincObjects);
+              } else {
+                this.hideRegionTooltip();
+                this.$refs.scaffoldTreeControls.removeActive(false);
+              }
             }
+            //Emit when an object is selected
+            //@arg Identifier of selected objects
+            this.$emit("scaffold-selected", event.identifiers);
           }
+        } else if (event.eventType == 2) {
+          if (this.selectedObjects.length === 0) {
+            this.hideRegionTooltip();
+            // const offsets = this.$refs.scaffoldContainer.getBoundingClientRect();
+            if (this.$refs.scaffoldTreeControls) {
+              if (names.length > 0) {
+                //this.$refs.scaffoldTreeControls.changeHoverByNames(names, region, false);
+                this.$refs.scaffoldTreeControls.updateHoverUI(zincObjects);
+              } else {
+                this.$refs.scaffoldTreeControls.removeHover(true);
+              }
+            }
+            if (event.identifiers.length > 0 && event.identifiers[0]) {
+              let id = event.identifiers[0].data.id
+                ? event.identifiers[0].data.id
+                : event.identifiers[0].data.group;
+              if (event.identifiers[0].coords) {
+                this.tData.active = false;
+                this.tData.visible = true;
+                this.tData.label = id;
+                if (event.identifiers[0].data.region) {
+                  this.tData.region = event.identifiers[0].data.region;
+                }
+                else {
+                  this.tData.region = undefined;
+                }
+                this.tData.x = event.identifiers[0].coords.x;
+                this.tData.y = event.identifiers[0].coords.y;
+                this.createEditTemporaryLines(event.identifiers[0].extraData.worldCoords);
+              }
+            }
+            //Emit when an object is highlighted
+            //@arg Identifier of selected objects
+            this.$emit("scaffold-highlighted", event.identifiers);
+          }
+        } else if (event.eventType == 3) {
+          //MOVE
           if (event.identifiers.length > 0 && event.identifiers[0]) {
-            let id = event.identifiers[0].data.id
-              ? event.identifiers[0].data.id
-              : event.identifiers[0].data.group;
             if (event.identifiers[0].coords) {
-              this.tData.active = false;
-              this.tData.visible = true;
-              this.tData.label = id;
-              if (event.identifiers[0].data.region) {
-                this.tData.region = event.identifiers[0].data.region;
-              }
-              else {
-                this.tData.region = undefined;
-              }
-              this.tData.x = event.identifiers[0].coords.x;
-              this.tData.y = event.identifiers[0].coords.y;
+              const offsets =
+                this.$refs.scaffoldContainer.getBoundingClientRect();
+              this.tData.x = event.identifiers[0].coords.x - offsets.left;
+              this.tData.y = event.identifiers[0].coords.y - offsets.top;
               this.createEditTemporaryLines(event.identifiers[0].extraData.worldCoords);
             }
-          }
-          //Emit when an object is highlighted
-          //@arg Identifier of selected objects
-          this.$emit("scaffold-highlighted", event.identifiers);
-        }
-      } else if (event.eventType == 3) {
-        //MOVE
-        if (event.identifiers.length > 0 && event.identifiers[0]) {
-          if (event.identifiers[0].coords) {
-            const offsets =
-              this.$refs.scaffoldContainer.getBoundingClientRect();
-            this.tData.x = event.identifiers[0].coords.x - offsets.left;
-            this.tData.y = event.identifiers[0].coords.y - offsets.top;
             this.createEditTemporaryLines(event.identifiers[0].extraData.worldCoords);
           }
-          this.createEditTemporaryLines(event.identifiers[0].extraData.worldCoords);
         }
       }
     },
@@ -1746,6 +1856,10 @@ export default {
               }
             }
           });
+        } else if (this.viewingMode === "Exploration") {
+          this.activeDrawTool = undefined;
+          this.activeDrawMode = undefined;
+          this.createData.shape = "";
         }
         if ((this.viewingMode === "Exploration") ||
           (this.viewingMode === "Annotation") &&
@@ -1917,6 +2031,7 @@ export default {
             });
           }
         }
+        this.localAnnotationsList.length = 0;
         this.updateSettingsfromScene();
         this.$module.updateTime(0.01);
         this.$module.updateTime(0);
@@ -1996,6 +2111,33 @@ export default {
       return this.$module.scene.exportGLTF(binary);
     },
     /**
+     * Return a copy of the local annotations list.
+     * This list is used for storing user created annotation
+     * when enableLocalAnnotations is set to true.
+     *
+     * @vuese
+     */
+     getLocalAnnotations: function () {
+      return [...this.localAnnotationsList];
+    },
+    /**
+     * Import local annotations. The annotations will only
+     * be imported when enableLocalAnnotations is set to
+     * true;
+     *
+     * @vuese
+     */
+     importLocalAnnotations: function (annotationsList) {
+      if (this.enableLocalAnnotations) {
+        const featuresList = annotationsList.map((annotation) => annotation.feature);
+        annotationFeaturesToPrimitives(this.$module.scene, featuresList);
+        //Make a local non-reactive copy.
+        annotationsList.forEach((annotation) => {
+          this.localAnnotationsList.push({...annotation});
+        });
+      }
+    },
+    /**
      * Function used for reading in new scaffold metadata and a custom
      * viewport. This function will ignore the state prop and
      * read in the new url.
@@ -2063,12 +2205,14 @@ export default {
      * Callback using ResizeObserver.
      */
     adjustLayout: function () {
-      let width = this.$refs.scaffoldContainer.clientWidth;
-      this.minimisedSlider = width < 812;
-      if (this.minimisedSlider) {
-        this.sliderPosition = this.drawerOpen ? "right" : "left";
-      } else {
-        this.sliderPosition = "";
+      if (this.$refs.scaffoldContainer) {
+        let width = this.$refs.scaffoldContainer.clientWidth;
+        this.minimisedSlider = width < 812;
+        if (this.minimisedSlider) {
+          this.sliderPosition = this.drawerOpen ? "right" : "left";
+        } else {
+          this.sliderPosition = "";
+        }
       }
     },
     toggleRendering: function (flag) {
@@ -2267,17 +2411,6 @@ export default {
   padding-left: 8px;
 }
 
-.bottom-draw-control {
-  background-color: var(--el-color-primary-light-9);
-  padding: 4px 4px 2px 4px;
-  border-style: solid;
-  border-color: var(--el-color-primary-light-5);
-  border-radius: 1rem;
-  position: absolute;
-  right: calc(50vw - 100px);;
-  bottom: 16px;
-}
-
 :deep(.non-selectable) {
   user-select: none;
 }
@@ -2390,15 +2523,6 @@ export default {
   &:focus {
     border: none;
     outline: none;
-  }
-
-  &.shape {
-    margin-left: 4px;
-    margin-right: 4px;
-    color: var(--el-color-primary-light-5)!important;
-    &.active {
-      color: var(--el-color-primary)!important;
-    }
   }
 }
 

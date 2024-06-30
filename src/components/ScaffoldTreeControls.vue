@@ -175,6 +175,23 @@ export default {
         }
       }
     },
+    zincObjectRemoved: function(zincObject) {
+      const group = zincObject.groupName;
+      const objects = zincObject.region.findObjectsWithGroupName(group, false);
+      if (objects.length === 0) {
+        const paths = zincObject.region.getFullSeparatedPath();
+        const regionData = this.findOrCreateRegion(this.treeData[0], paths, "");
+        if (regionData.children) {
+          for (let i = 0; i < regionData.children.length; i++) {
+            if (regionData.children[i].label === group) {
+              regionData.children.splice(i, 1);
+              this.__nodeNumbers--;
+              return;
+            }
+          }
+        }
+      }
+    },
     checkChanged: function (node, data) {
       const isRegion = node.isRegion;
       const isPrimitives = node.isPrimitives;
@@ -325,6 +342,7 @@ export default {
         this.zincObjectAdded(zincObject);
       });
       this.$module.addOrganPartAddedCallback(this.zincObjectAdded);
+      this.$module.addOrganPartRemovedCallback(this.zincObjectRemoved);
     },
     setColourField: function (treeData, nodeData = undefined) {
       treeData

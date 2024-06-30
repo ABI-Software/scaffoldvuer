@@ -1,4 +1,4 @@
-import { THREE } from 'zincjs';
+import { Label, THREE } from 'zincjs';
 
 export const createListFromPrimitives = (primitives, list) => {
   if (primitives) {
@@ -42,6 +42,17 @@ export const getEditableLines = (event) => {
           }
         }
       }
+    }
+  }
+  return undefined;
+}
+
+export const getDeletableObjects = (event) => {
+  const zincObjects = event.zincObjects;
+  if (zincObjects.length > 0 && zincObjects[0]) {
+    const zincObject = zincObjects[0];
+    if (zincObject.isEditable) {
+      return zincObject;
     }
   }
   return undefined;
@@ -268,6 +279,10 @@ const createNewAnnotationsWithFeatures = (zincObject, region, group, scaffoldUrl
         }
       },
     }
+    if (comment === "Deleted") {
+      userAnnotation.feature = undefined;
+    }
+
     return userAnnotation;
   }
 }
@@ -275,10 +290,11 @@ const createNewAnnotationsWithFeatures = (zincObject, region, group, scaffoldUrl
 /*
  * Add/Update drawn annotations to the server.
  */
-export const addUserAnnotationWithFeature = (service, userToken, zincObject, region, group, scaffoldUrl, action) => {
-  if (service && service.currentUser) {
-    const annotation = createNewAnnotationsWithFeatures(zincObject, region, group, scaffoldUrl, action);
-    if (annotation) {
+export const addUserAnnotationWithFeature = (service, userToken, zincObject,
+  region, group, scaffoldUrl, action) => {
+  const annotation = createNewAnnotationsWithFeatures(zincObject, region, group, scaffoldUrl, action);
+  if (annotation) {
+    if (service && service.currentUser) {
       annotation.creator = {...service.currentUser};
       if (!annotation.creator.orcid) annotation.creator.orcid = '0000-0000-0000-0000';
       service.addAnnotation(userToken, annotation)
@@ -291,6 +307,7 @@ export const addUserAnnotationWithFeature = (service, userToken, zincObject, reg
         console.log('There is a problem with the submission, please try again later');
       })
     }
+    return annotation;
   }
 }
 
@@ -322,6 +339,9 @@ export const annotationFeaturesToPrimitives = (scene, features)  => {
           undefined,
           0x0022ee,
         );
+        geometry.coordinates.forEach((coordinates) => {
+          addLabelToObject(object.zincObject, coordinates, group);
+        });
       } else if (geometry.type === "MultiLineString") {
         object = scene.createLines(
           region,
@@ -334,3 +354,24 @@ export const annotationFeaturesToPrimitives = (scene, features)  => {
     });
   }
 }
+
+/*
+ * Add a label at the specified local and put it 
+ * into the object's group
+ */
+const addLabelToObject = (zincObject, coords, groupName) => {
+  if (groupName) {
+    const colour = new THREE.Color(0x0022ee);
+    const label = new Label(groupName, colour);
+    label.setPosition(coords[0], coords[1], coords[2]);
+    const sprite  = label.getSprite();
+    sprite.material.sizeAttenuation = false;
+    sprite.material.alphaTest = 0.5;
+    sprite.material.transparent = true;
+    sprite.material.depthWrite = false;
+    sprite.material.depthTest = false;
+    zincObject.group.add(sprite);
+  }
+}
+
+export { addLabelToObject }

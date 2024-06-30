@@ -27,6 +27,7 @@
         :view-u-r-l="viewURL"
         :format="format"
         :marker-labels="markerLabels"
+        :enableLocalAnnotations="true"
         @open-map="openMap"
         @on-ready="onReady"
         @scaffold-selected="onSelected"
@@ -114,9 +115,6 @@
           <el-col :span="auto">
             <el-button size="small" @click="screenCapture()"> Capture </el-button>
           </el-col>
-          <el-col :span="auto">
-            <el-button size="small" @click="changeMarkers"> Change Markers </el-button>
-          </el-col>
         </el-row>
 
         <el-row :gutter="20" justify="center" align="middle">
@@ -135,6 +133,25 @@
           </el-col>
           <el-col :span="auto">
             <el-button size="small" @click="exportGLTF()"> Export GLTF </el-button>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="20" justify="center" align="middle">
+          <el-col :span="auto">
+            <el-button size="small" @click="exportLocalAnnotations()">
+              Export Annotations
+            </el-button>
+          </el-col>
+          <el-col :span="auto">
+              <el-button size="small">
+                <label for="annotations-upload">Import Annotations</label>
+                <input
+                  id="annotations-upload"
+                  type="file"
+                  accept="application/json"
+                  @change="importLocalAnnotations" 
+                />
+              </el-button>
           </el-col>
         </el-row>
 
@@ -297,6 +314,7 @@ import {
   ElInputNumber as InputNumber,
   ElPopover as Popover,
   ElRow as Row,
+  ElUpload as Upload,
   ElSwitch as Switch,
 } from "element-plus";
 import { useRoute, useRouter } from 'vue-router'
@@ -304,6 +322,18 @@ import { HelpModeDialog } from '@abi-software/map-utilities'
 import '@abi-software/map-utilities/dist/style.css'
 
 let texture_prefix = undefined;
+
+const writeTextFile = (filename, data) => {
+  let dataStr =
+    "data:text/json;charset=utf-8," +
+    encodeURIComponent(JSON.stringify(data));
+  let hrefElement = document.createElement("a");
+  document.body.append(hrefElement);
+  hrefElement.download = filename;
+  hrefElement.href = dataStr;
+  hrefElement.click();
+  hrefElement.remove();
+} 
 
 export default {
   name: "app",
@@ -317,6 +347,7 @@ export default {
     Popover,
     Row,
     Switch,
+    Upload,
     ElIconFolderOpened,
     ElIconSetting,
     DropZone,
@@ -342,7 +373,7 @@ export default {
       tumbleOn: false,
       tumbleDirection: [1.0, 0.0],
       showColourPicker: true,
-      markerCluster: true,
+      markerCluster: false,
       minimapSettings: {
         x_offset: 16,
         y_offset: 50,
@@ -350,22 +381,7 @@ export default {
         height: 128,
         align: "top-right",
       },
-      markerLabels: {
-        "body proper": 9,
-        "Spinal cord": 8,
-        "lung": 11,
-        "stomach": 12,
-        "urinary bladder": 11,
-        "Brainstem": 11,
-        "heart": 9,
-        "skin epidermis": 5,
-        "Diaphragm": 7,
-        "colon": 9,
-        "vagus nerve": 3,
-        "myenteric nerve plexus": 2,
-        "esophagus": 1,
-        "urethra": 3
-      },
+      markerLabels: { },
       render: true,
       region: "",
       viewURL: "",
@@ -400,6 +416,28 @@ export default {
     tumbleOn: function () {
       this.autoTumble();
     },
+    markerCluster: function(val) {
+      if (val) {
+        this.markerLabels = {
+          "body proper": 9,
+          "Spinal cord": 8,
+          "lung": 11,
+          "stomach": 12,
+          "urinary bladder": 11,
+          "Brainstem": 11,
+          "heart": 9,
+          "skin epidermis": 5,
+          "Diaphragm": 7,
+          "colon": 9,
+          "vagus nerve": 3,
+          "myenteric nerve plexus": 2,
+          "esophagus": 1,
+          "urethra": 3
+        };
+      } else {
+        this.markerLabels = { };
+      }
+    },
     "route.query": {
       handler: "parseQuery",
       deep: true,
@@ -426,15 +464,8 @@ export default {
   methods: {
     exportGLTF: function () {
       this.$refs.scaffold.exportGLTF(false).then((data) => {
-        let dataStr =
-          "data:text/json;charset=utf-8," +
-          encodeURIComponent(JSON.stringify(data));
-        let hrefElement = document.createElement("a");
-        document.body.append(hrefElement);
-        hrefElement.download = `export.gltf`;
-        hrefElement.href = dataStr;
-        hrefElement.click();
-        hrefElement.remove();
+        const filename = 'export' + JSON.stringify(new Date()) + '.gltf';
+        writeTextFile(filename, data);
       });
     },
     exportGLB: function () {
@@ -449,13 +480,25 @@ export default {
         hrefElement.remove();
       });
     },
+    exportLocalAnnotations: function() {
+      const annotations = this.$refs.scaffold.getLocalAnnotations();
+      const filename = 'scaffoldAnnotations' + JSON.stringify(new Date()) + '.json';
+      writeTextFile(filename, annotations);
+    },
+    onReaderLoad: function(event) {
+      const annotationsList = JSON.parse(event.target.result);
+      this.$refs.scaffold.importLocalAnnotations(annotationsList);
+    },
+    importLocalAnnotations: function() {
+      const selectedFile = document.getElementById("annotations-upload").files[0];
+      const reader = new FileReader();
+      reader.onload = this.onReaderLoad;
+      reader.readAsText(selectedFile);
+    },
     objectAdded: function (zincObject) {
       if (this.consoleOn) {
         console.log(zincObject)
         console.log(this.$refs.scaffold.$module.scene.getBoundingBox())
-      }
-      if (this._objects.length === 0) {
-        zincObject.setMarkerMode("on");
       }
       if (zincObject.isGeometry) {
         zincObject._lod._material.wireframe = this.wireframe;
@@ -632,9 +675,7 @@ export default {
         if (this.onClickMarkers) this.$refs.scaffold.setMarkerModeForObjectsWithName(data[0].data.group, "on");
       }
     },
-    changeMarkers: function () {
-      this.markerLabels = {"left atrium": 3, "epicardium": 4 , "stomach": 5};
-    },
+
     onNavigated: function (data) {
       this.zoom = data.zoom;
       this.pos[0] = data.target[0];
@@ -828,4 +869,9 @@ body {
 svg.map-icon {
   color: $app-primary-color;
 }
+
+input[type="file"] {
+  display: none;
+}
+
 </style>
