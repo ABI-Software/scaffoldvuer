@@ -857,7 +857,7 @@ export default {
         active: false,
       },
       fileFormat: "metadata",
-      markerLabelEntry: markRaw({}),
+      markerLabelEntry: markRaw(this.markerLabels),
       previousMarkerLabelEntry: markRaw({}),
       viewingMode: "Exploration",
       viewingModes: {
@@ -885,7 +885,7 @@ export default {
       imageTypes: ['Image', 'Segmentation', 'Scaffold', 'Plot'],
       imageClicked: '',
       /**
-       * List of group names 
+       * List of group names
        */
       groupNames: markRaw([]),
     };

@@ -168,7 +168,9 @@ export default {
         imageEntries = imageThumbnailsEntries[lowerCaseLabel];
       }
       if (this.imageThumbnailSidebar) {
-        this.$emit('image-thumbnail-open', imageEntries)
+        if (imageEntries.length) {
+          this.$emit('image-thumbnail-open', imageEntries)
+        }
         return [];
       }
       return imageEntries;
