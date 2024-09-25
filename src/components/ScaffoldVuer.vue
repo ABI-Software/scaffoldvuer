@@ -15,9 +15,12 @@
       :x="tData.x"
       :y="tData.y"
       :annotationDisplay="annotationDisplay"
+      :imageThumbnailSidebar="imageThumbnailSidebar"
+      :imageThumbnails="imageThumbnailsEntry"
       @confirm-create="confirmCreate($event)"
       @cancel-create="cancelCreate()"
       @confirm-delete="confirmDelete($event)"
+      @image-thumbnail-open="onImageThumbnailOpen"
     />
     <div
       id="organsDisplayArea"
@@ -284,7 +287,7 @@
         ref="backgroundPopover"
         :virtual-ref="backgroundIconRef"
         placement="top-start"
-        width="128"
+        width="330"
         :teleported="false"
         trigger="click"
         popper-class="background-popper non-selectable h-auto"
@@ -292,7 +295,7 @@
       >
         <div>
           <el-row class="backgroundText">Viewing Mode</el-row>
-          <el-row class="backgroundControl">
+          <el-row class="backgroundChooser">
             <div style="margin-bottom: 2px;">
               <template
                   v-for="(value, key, index) in viewingModes"
@@ -310,6 +313,45 @@
               {{ viewingModes[viewingMode] }}
             </el-row>
           </el-row>
+          <template v-if="viewingMode === 'Exploration' && sparcAPI">
+            <el-row class="backgroundSpacer"></el-row>
+            <el-row class="backgroundText">Markers display</el-row>
+            <el-row class="backgroundChooser">
+              <el-col :span="14">
+                <el-radio-group
+                  v-model="imageRadio"
+                  class="flatmap-radio"
+                  :disabled="imagesDownloading"
+                  @change="setImage"
+                >
+                  <el-radio :value="false">Standard</el-radio>
+                  <el-radio :value="true">Image</el-radio>
+                </el-radio-group>
+              </el-col>
+              <el-col :span="10" v-if="imageRadio">
+                <el-select
+                  :teleported="false"
+                  v-model="imageType"
+                  placeholder="Select"
+                  class="scaffold-select-box imageSelector"
+                  popper-class="scaffold_viewer_dropdown"
+                  :disabled="imagesDownloading"
+                  @change="setImageType"
+                >
+                  <el-option
+                    v-for="item in imageTypes"
+                    :key="item"
+                    :label="item"
+                    :value="item"
+                  >
+                    <el-row>
+                      <el-col :span="12">{{ item }}</el-col>
+                    </el-row>
+                  </el-option>
+                </el-select>
+              </el-col>
+            </el-row>
+          </template>
           <el-row class="backgroundSpacer"></el-row>
           <el-row class="backgroundText"> Change background </el-row>
           <el-row class="backgroundChooser">
@@ -382,7 +424,7 @@
 
 <script>
 /* eslint-disable no-alert, no-console */
-import { markRaw, shallowRef } from 'vue';
+import { markRaw, toRaw, shallowRef } from 'vue';
 import {
   WarningFilled as ElIconWarningFilled,
   ArrowDown as ElIconArrowDown,
@@ -421,8 +463,16 @@ import { AnnotationService } from '@abi-software/sparc-annotation';
 import { EventNotifier } from "../scripts/EventNotifier.js";
 import { OrgansViewer } from "../scripts/OrgansRenderer.js";
 import { SearchIndex } from "../scripts/Search.js";
-import { mapState } from 'pinia';
-import { useMainStore } from "@/store/index";
+import { mapState, mapStores } from 'pinia';
+import { useMainStore } from "@/stores/index";
+import { useSettingsStore } from '@/stores/settings'
+import {
+  getBiolucidaThumbnails,
+  getSegmentationThumbnails,
+  getScaffoldThumbnails,
+  getPlotThumbnails
+} from '../services/scicrunchQueries'
+import imageMixin from '../mixins/imageMixin.js'
 
 /**
  * A vue component of the scaffold viewer.
@@ -432,6 +482,7 @@ import { useMainStore } from "@/store/index";
  */
 export default {
   name: "ScaffoldVuer",
+  mixins: [imageMixin],
   components: {
     Button,
     Col,
@@ -570,12 +621,12 @@ export default {
      * GroupName to value pair.
      * The value can be a single number or and object in the following
      * form:
-     * 
+     *
      * {
      *  number: Number,
      *  imgURL: String
      * }
-     * 
+     *
      * When imgURL is specified, scaffoldvuer will attempt to render
      * the image in imgURL as marker instead.
      *
@@ -689,9 +740,23 @@ export default {
     /**
      * Enable local annotations
      */
-     enableLocalAnnotations: {
+    enableLocalAnnotations: {
       type: Boolean,
       default: false
+    },
+    /**
+     * Specify the endpoint of the SPARC API.
+     */
+    sparcAPI: {
+      type: String,
+      default: '',
+    },
+    /**
+     * The option to show image thumbnail in sidebar
+     */
+    imageThumbnailSidebar: {
+      type: Boolean,
+      default: false,
     },
   },
   provide() {
@@ -700,6 +765,7 @@ export default {
       scaffoldUrl: this.url,
       $annotator: this.annotator,
       boundingDims: this.boundingDims,
+      getFeaturesAlert: () => undefined,
     };
   },
   data: function () {
@@ -743,6 +809,7 @@ export default {
       inHelp: false,
       helpModeActiveIndex: this.helpModeInitialIndex,
       loading: false,
+      imagesDownloading: false,
       duration: 3000,
       drawerOpen: true,
       currentBackground: "white",
@@ -790,7 +857,8 @@ export default {
         active: false,
       },
       fileFormat: "metadata",
-      previousMarkerLabels: markRaw({}),
+      markerLabelEntry: markRaw(this.markerLabels),
+      previousMarkerLabelEntry: markRaw({}),
       viewingMode: "Exploration",
       viewingModes: {
         "Exploration": "View and explore detailed visualization of 3D scaffolds",
@@ -812,6 +880,14 @@ export default {
         centre: [0, 0, 0],
         size:[1, 1, 1],
       },
+      imageRadio: false,
+      imageType: 'Image',
+      imageTypes: ['Image', 'Segmentation', 'Scaffold', 'Plot'],
+      imageClicked: '',
+      /**
+       * List of group names
+       */
+      groupNames: markRaw([]),
     };
   },
   watch: {
@@ -891,14 +967,20 @@ export default {
       },
       immediate: true,
     },
-    markerLabels: function(labels) {
-      for (const [key, value] of Object.entries(this.previousMarkerLabels)) {
+    markerLabels: function (labels) {
+      if (this.imageRadio === false) {
+        //Only updates the following if marker mode is standard
+        this.markerLabelEntry = markRaw({...labels});
+      }
+    },
+    markerLabelEntry: function (entry) {
+      for (const [key, value] of Object.entries(this.previousMarkerLabelEntry)) {
         this.setMarkerModeForObjectsWithName(key, value, "off");
       }
-      for (const [key, value] of Object.entries(labels)) {
+      for (const [key, value] of Object.entries(entry)) {
         this.setMarkerModeForObjectsWithName(key, value, "on");
       }
-      this.previousMarkerLabels = markRaw({...labels});
+      this.previousMarkerLabelEntry = markRaw({...entry});
     },
   },
   beforeCreate: function () {
@@ -938,9 +1020,13 @@ export default {
   },
   computed: {
     ...mapState(useMainStore,  ['userToken']),
+    ...mapStores(useSettingsStore),
     annotationDisplay: function() {
       return this.viewingMode === 'Annotation' && this.tData.active === true &&
         (this.activeDrawMode === 'Edit' || this.activeDrawMode === 'Delete');
+    },
+    imageThumbnailsEntry: function() {
+      return this.imageClicked ? this.convertUberonToName() : {};
     }
   },
   methods: {
@@ -965,6 +1051,9 @@ export default {
       this.$_searchIndex.addZincObject(zincObject, zincObject.uuid);
       if (this.timeVarying === false && zincObject.isTimeVarying()) {
         this.timeVarying = true;
+      }
+      if (zincObject.groupName) {
+        this.groupNames.push(zincObject.groupName.toLowerCase());
       }
       //Emit when a new object is added to the scene
       //@arg The object added to the sceene
@@ -1077,7 +1166,7 @@ export default {
         region, group, this.url, comment);
       if (this.enableLocalAnnotations) {
         annotation.group = group;
-        let regionPath = region; 
+        let regionPath = region;
         if (regionPath.slice(-1) === "/") {
           regionPath = regionPath.slice(0, -1);
         }
@@ -1180,7 +1269,7 @@ export default {
         }
       }
       this.cancelCreate();
-    },  
+    },
     formatTooltip(val) {
       if (this.timeMax >= 1000) {
         if (val) {
@@ -1267,7 +1356,7 @@ export default {
       return objects;
     },
     /**
-     * Switch active drawing type 
+     * Switch active drawing type
      * @arg shapeName shape to toggle
      *
      * @vuese
@@ -1392,7 +1481,7 @@ export default {
           this.createData.points.push(coords);
         }
       }
-    },    
+    },
     /**
      * Return renderer information
      *
@@ -1480,6 +1569,9 @@ export default {
                 ? identifier.data.id
                 : identifier.data.group;
               names.push(id);
+              if (identifier.data) {
+                identifier.data.imageType = this.imageRadio ? this.imageType : "Standard"
+              }
             }
           });
           zincObjects = event.zincObjects;
@@ -1502,6 +1594,13 @@ export default {
                 this.hideRegionTooltip();
                 this.$refs.scaffoldTreeControls.removeActive(false);
               }
+            }
+            if (this.imageRadio && event.identifiers.length && event.identifiers[0]) {
+              this.imageClicked = event.identifiers[0].data.id
+                ? event.identifiers[0].data.id
+                : event.identifiers[0].data.group;
+            } else {
+              this.imageClicked = ''
             }
             //Emit when an object is selected
             //@arg Identifier of selected objects
@@ -1553,6 +1652,12 @@ export default {
               this.createEditTemporaryLines(event.identifiers[0].extraData.worldCoords);
             }
             this.createEditTemporaryLines(event.identifiers[0].extraData.worldCoords);
+            const id = event.identifiers[0].data.id
+              ? event.identifiers[0].data.id
+              : event.identifiers[0].data.group;
+            if (this.imageClicked !== id) {
+              this.imageClicked = ''
+            }
           }
         }
       }
@@ -1939,7 +2044,7 @@ export default {
     /**
      * Set the marker modes for objects with the provided name, mode can
      * be "on", "off" or "inherited".
-     * Value can either be number or an object containing number and 
+     * Value can either be number or an object containing number and
      * imgURL.
      */
     setMarkerModeForObjectsWithName: function (name, value, mode) {
@@ -2198,7 +2303,7 @@ export default {
           const region = annotation.region;
           let fullName = region.slice(-1) === "/" ? region : region + "/";
           const noSlash = fullName.slice(0, -1);
-          annotation.region = noSlash; 
+          annotation.region = noSlash;
           fullName = fullName + group;
           const featureID = encodeURIComponent(fullName);
           annotation.item.id = featureID;
@@ -2240,6 +2345,7 @@ export default {
             visibility: visibility,
           })
         );
+        this.groupNames.length = 0;
         if (this.fileFormat === "gltf") {
           this.$module.loadGLTFFromURL(newValue, "scene", true);
         } else {
@@ -2327,14 +2433,71 @@ export default {
       this.$module.toggleSyncControl(flag, rotateMode);
       this.$module.setSyncControlCallback(this.syncControlCallback);
     },
-
     /**
      * Set the markers for the scene.
      */
     setMarkers: function () {
-      for (const [key, value] of Object.entries(this.markerLabels)) {
+      for (const [key, value] of Object.entries(this.markerLabelEntry)) {
         this.setMarkerModeForObjectsWithName(key, value, "on");
       }
+    },
+    removeImageThumbnails: function () {
+      this.imageThumbnails = {};
+      this.markerLabelEntry = markRaw(this.markerLabels);
+    },
+    setImage: async function (flag) {
+      if (flag) {
+        await this.setImageType(this.imageType);
+        this.$module.scene.enableMarkerCluster(false);
+      } else {
+        this.removeImageThumbnails();
+        this.$module.scene.enableMarkerCluster(this.markerCluster);
+      }
+    },
+    setImageType: async function (type) {
+      this.imageType = type;
+      this.imagesDownloading = true;
+      if (!this.settingsStore.imageTypeCached(type)) {
+        this.loading = true;
+        await this.fetchImageThumbnails(type);
+        this.loading = false;
+      }
+      this.populateImageThumbnails(type);
+    },
+    fetchImageThumbnails: async function (type) {
+      let thumbnails = {};
+      const organCuries = this.settingsStore.organCuries;
+      if (type === 'Image') {
+        thumbnails = await getBiolucidaThumbnails(this.sparcAPI, organCuries, type);
+      } else if (type === 'Segmentation') {
+        thumbnails = await getSegmentationThumbnails(this.sparcAPI, organCuries, type);
+      } else if (type === 'Scaffold') {
+        thumbnails = await getScaffoldThumbnails(this.sparcAPI, organCuries, type);
+      } else if (type === 'Plot') {
+        thumbnails = await getPlotThumbnails(this.sparcAPI, organCuries, type);
+      }
+      this.settingsStore.updateImageThumbnails(type, thumbnails);
+    },
+    convertUberonToName: function () {
+      const organCuries = this.settingsStore.organCuries;
+      const identifiers = organCuries.filter(
+        (curie) => this.groupNames.includes(curie.name.toLowerCase())
+        ).map((curie) => curie.id);
+      const imageThumbnails = this.settingsStore.getImageThumbnails(this.imageType, identifiers);
+      return Object.fromEntries(
+          Object.entries(imageThumbnails)
+            .map(([key, value]) => [organCuries.filter((curie) => curie.id === key)[0].name, value]));
+    },
+    populateImageThumbnails: async function (type) {
+      this.removeImageThumbnails();
+      const thumbnails = this.convertUberonToName();
+      this.loading = true;
+      this.markerLabelEntry = markRaw(await this.populateMapWithImages(thumbnails, type));
+      this.loading = false;
+      this.imagesDownloading = false;
+    },
+    onImageThumbnailOpen: function (payload) {
+      this.$emit('image-thumbnail-open', payload);
     },
   },
 };
@@ -2495,7 +2658,7 @@ export default {
   background-color: #ffffff;
   border: 1px solid $app-primary-color;
   box-shadow: 0px 2px 12px 0px rgba(0, 0, 0, 0.06);
-  height: 140px;
+  height: fit-content;
   min-width: 200px;
   .el-popper__arrow {
     &:before {
@@ -2751,6 +2914,10 @@ export default {
       padding: 0;
       min-height: 24px
     }
+  }
+
+  &.imageSelector {
+    width: 125px!important;
   }
 }
 

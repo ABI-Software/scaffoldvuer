@@ -14,7 +14,7 @@
       <template #default>
         <div class="tooltip-text">{{ label }}</div>
         <div class="tooltip-text" v-if="region">Region: {{ region }}</div>
-        <CreateTooltiipContent
+        <CreateTooltipContent
           v-show="createData.toBeConfirmed"
           :createData="createData"
           @confirm-create="$emit('confirm-create', $event)"
@@ -22,10 +22,14 @@
         />
         <Tooltip
           class="p-tooltip"
-          v-show="annotationDisplay && !createData.toBeConfirmed"
-          ref="annotationTooltip"
-          :annotationDisplay="true"
+          v-show="
+            (annotationDisplay && !createData.toBeConfirmed) ||
+            imageEntry.length
+          "
+          ref="tooltip"
+          :tooltipType="annotationDisplay ? 'annotation' : 'image'"
           :annotationEntry="annotationEntry"
+          :imageEntry="imageEntry"
         />
         <div v-if="createData.toBeDeleted" class="delete-container">
           <el-row>
@@ -66,9 +70,9 @@ import {
 import {
   Delete as ElIconDelete,
 } from '@element-plus/icons-vue'
-import CreateTooltiipContent from "./CreateTooltipContent.vue";
 import { mapState } from 'pinia';
-import { useMainStore } from "@/store/index";
+import { useMainStore } from "@/stores/index";
+import CreateTooltipContent from "./CreateTooltipContent.vue";
 import { Tooltip } from '@abi-software/map-utilities'
 import '@abi-software/map-utilities/dist/style.css'
 
@@ -79,7 +83,7 @@ export default {
   name: "ScaffoldTooltip",
   components: {
     Col,
-    CreateTooltiipContent,
+    CreateTooltipContent,
     ElIconDelete,
     Icon,
     Popover,
@@ -121,6 +125,14 @@ export default {
       type: Number,
       default: 200,
     },
+    imageThumbnails: {
+      type: Object,
+      default: {},
+    },
+    imageThumbnailSidebar: {
+      type: Boolean,
+      default: false,
+    },
   },
   inject: ['scaffoldUrl'],
   provide() {
@@ -130,7 +142,6 @@ export default {
   },
   data: function () {
     return {
-      display: false,
       annotationEntry: { },
       ElIconDelete: shallowRef(ElIconDelete),
     };
@@ -145,11 +156,29 @@ export default {
       const x = this.x - 40;
       return { left: x + "px", top: this.y - yOffset + "px" };
     },
+    imageEntry: function () {
+      let imageEntries = []
+      const imageThumbnailsEntries = Object.assign({},
+        Object.fromEntries(
+          Object.entries(this.imageThumbnails)
+            .filter(([key, value]) => value.length > 0)
+            .map(([key, value]) => [key.toLowerCase(), value])))
+      const lowerCaseLabel = this.label.toLowerCase()
+      if (lowerCaseLabel in imageThumbnailsEntries) {
+        imageEntries = imageThumbnailsEntries[lowerCaseLabel];
+      }
+      if (this.imageThumbnailSidebar) {
+        if (imageEntries.length) {
+          this.$emit('image-thumbnail-open', imageEntries)
+        }
+        return [];
+      }
+      return imageEntries;
+    },
   },
   methods: {
     checkForDisplay: function () {
       if (this.visible && this.label && this.label !== "") {
-        this.display = true;
         if (this.annotationDisplay) {
           const region = this.region ? this.region +"/" : "";
           this.annotationEntry = {
@@ -158,9 +187,7 @@ export default {
             "resource": encodeURIComponent(this.scaffoldUrl),
           };
         }
-      }
-      else {
-        this.display = false;
+      } else {
         this.annotationEntry = { };
       }
     },

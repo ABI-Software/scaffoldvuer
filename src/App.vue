@@ -28,6 +28,7 @@
         :format="format"
         :marker-labels="markerLabels"
         :enableLocalAnnotations="false"
+        :sparcAPI="sparcAPI"
         @open-map="openMap"
         @on-ready="onReady"
         @scaffold-selected="onSelected"
@@ -321,6 +322,9 @@ import {
 import { useRoute, useRouter } from 'vue-router'
 import { HelpModeDialog } from '@abi-software/map-utilities'
 import '@abi-software/map-utilities/dist/style.css'
+import { mapStores } from 'pinia';
+import { useSettingsStore } from '@/stores/settings';
+import { getOrganCuries } from '@/services/scicrunchQueries'
 
 let texture_prefix = undefined;
 
@@ -358,7 +362,7 @@ export default {
   },
   data: function () {
     return {
-      consoleOn: true,
+      consoleOn: false,
       createLinesWithNormal: false,
       url: undefined,
       input: undefined,
@@ -406,8 +410,12 @@ export default {
       router: useRouter(),
       ElIconSetting: shallowRef(ElIconSetting),
       ElIconFolderOpened: shallowRef(ElIconFolderOpened),
-      auto: NaN
+      auto: NaN,
+      sparcAPI: import.meta.env.VITE_SPARC_API,
     };
+  },
+  computed: {
+    ...mapStores(useSettingsStore),
   },
   watch: {
     input: function () {
@@ -422,7 +430,7 @@ export default {
           "body proper": 9,
           "Spinal cord": 8,
           "lung": 11,
-          "stomach": {number:12, imgURL: 'https://mapcore-bucket1.s3.us-west-2.amazonaws.com/texture/arm1/jpg/0984.jpg'},
+          "stomach": 12,
           "urinary bladder": 11,
           "Brainstem": 11,
           "heart": 9,
@@ -454,6 +462,9 @@ export default {
   },
   mounted: function () {
     this._objects = [];
+    if (this.sparcAPI) {
+      getOrganCuries(this.sparcAPI).then((organCuries) => this.settingsStore.updateOrganCuries(organCuries))
+    }
   },
   created: function () {
     texture_prefix = import.meta.env.VITE_TEXTURE_FOOT_PREFIX;
