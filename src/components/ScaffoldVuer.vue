@@ -1337,6 +1337,7 @@ export default {
         this.createData.shape = '';
         this.$module.selectObjectOnPick = true;
       } else if (type === 'tool') {
+        if (this.annotationDisplay) return;
         this.activeDrawTool = icon;
         this.createData.shape = this.activeDrawTool ? this.activeDrawTool : '';
         this.$module.selectObjectOnPick = false;
