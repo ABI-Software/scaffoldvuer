@@ -451,7 +451,14 @@ export default {
       ElIconFolderOpened: shallowRef(ElIconFolderOpened),
       auto: NaN,
       annotator: markRaw(new AnnotationService(`https://mapcore-demo.org/devel/flatmap/v4/annotator`)),
-      panelAxis: {}
+      panelAxis: {
+        front: [0, 0, -1],
+        back: [0, 0, 1],
+        left: [-1, 0, 0],
+        right: [1, 0, 0],
+        up: [0, 1, 0],
+        down: [0, -1, 0]
+      }
     };
   },
   watch: {
@@ -508,7 +515,8 @@ export default {
   },
   methods: {
     alignCameraWithAxis: function (direction) {
-      this.$refs.scaffold.alignCameraWithAxis(this.panelAxis[direction]);
+      // this.$refs.scaffold.alignCameraWithAxis(this.panelAxis[direction]);
+      this.$refs.scaffold.alignCameraWithAxis(direction);
     },
     exportGLTF: function () {
       this.$refs.scaffold.exportGLTF(false).then((data) => {
@@ -710,7 +718,6 @@ export default {
       }
       this.scaffoldRef = this.$refs.scaffold;
       // this.scaffoldRef.changeViewingMode('Annotation')
-      this.panelAxis = this.scaffoldRef.getPlaneAxis()
     },
     addLinesWithNormal: function (coord, normal) {
       if (coord && normal) {
