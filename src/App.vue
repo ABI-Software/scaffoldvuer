@@ -157,6 +157,39 @@
           </el-col>
         </el-row>
 
+        <el-row :gutter="20" justify="center" align="middle">
+          <el-col :span="auto">
+            <el-button size="small" @click="alignCameraWithAxis('front')">
+              Front Plane
+            </el-button>
+          </el-col>
+          <el-col :span="auto">
+            <el-button size="small" @click="alignCameraWithAxis('back')">
+              Back Plane
+            </el-button>
+          </el-col>
+          <el-col :span="auto">
+            <el-button size="small" @click="alignCameraWithAxis('left')">
+              Left Plane
+            </el-button>
+          </el-col>
+          <el-col :span="auto">
+            <el-button size="small" @click="alignCameraWithAxis('right')">
+              Right Plane
+            </el-button>
+          </el-col>
+          <el-col :span="auto">
+            <el-button size="small" @click="alignCameraWithAxis('up')">
+              Up Plane
+            </el-button>
+          </el-col>
+          <el-col :span="auto">
+            <el-button size="small" @click="alignCameraWithAxis('down')">
+              Down Plane
+            </el-button>
+          </el-col>
+        </el-row>
+
         <el-row justify="center" align="middle">
           <el-col>
             <el-row :gutter="20" justify="center" align="middle">
@@ -418,6 +451,7 @@ export default {
       ElIconFolderOpened: shallowRef(ElIconFolderOpened),
       auto: NaN,
       annotator: markRaw(new AnnotationService(`https://mapcore-demo.org/devel/flatmap/v4/annotator`)),
+      panelAxis: {}
     };
   },
   watch: {
@@ -473,6 +507,9 @@ export default {
     this.$refs.dropzone.revokeURLs();
   },
   methods: {
+    alignCameraWithAxis: function (direction) {
+      this.$refs.scaffold.alignCameraWithAxis(this.panelAxis[direction]);
+    },
     exportGLTF: function () {
       this.$refs.scaffold.exportGLTF(false).then((data) => {
         const filename = 'export' + JSON.stringify(new Date()) + '.gltf';
@@ -673,6 +710,7 @@ export default {
       }
       this.scaffoldRef = this.$refs.scaffold;
       // this.scaffoldRef.changeViewingMode('Annotation')
+      this.panelAxis = this.scaffoldRef.getPlaneAxis()
     },
     addLinesWithNormal: function (coord, normal) {
       if (coord && normal) {
