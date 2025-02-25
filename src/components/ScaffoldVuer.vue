@@ -978,6 +978,12 @@ export default {
         cameracontrol.alignCameraWithAxis(axis);
       }
     },
+    alignCameraWithDirection: function (direction) {
+      if (this.$module.scene) {
+        let cameracontrol = this.$module.scene.getZincCameraControls();
+        cameracontrol.alignCameraWithDirection(direction);
+      }
+    },
     /**
      * @public
      * Call this to manually add a zinc object into the current scene.
