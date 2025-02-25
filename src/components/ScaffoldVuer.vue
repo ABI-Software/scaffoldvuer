@@ -972,6 +972,18 @@ export default {
     },
   },
   methods: {
+    alignCameraWithAxis: function (axis) {
+      if (this.$module.scene) {
+        let cameracontrol = this.$module.scene.getZincCameraControls();
+        cameracontrol.alignCameraWithAxis(axis);
+      }
+    },
+    alignCameraWithDirection: function (direction) {
+      if (this.$module.scene) {
+        let cameracontrol = this.$module.scene.getZincCameraControls();
+        cameracontrol.alignCameraWithDirection(direction);
+      }
+    },
     /**
      * @public
      * Call this to manually add a zinc object into the current scene.
@@ -2230,6 +2242,7 @@ export default {
         const {centre, size} = this.$module.getCentreAndSize();
         this.boundingDims.centre = centre;
         this.boundingDims.size = size;
+        this.$module.scene.getViewportPlaneAxes();
         this.$nextTick(() => this.restoreSettings(options) );
         this.isReady = true;
       };
