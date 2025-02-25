@@ -2242,6 +2242,7 @@ export default {
         const {centre, size} = this.$module.getCentreAndSize();
         this.boundingDims.centre = centre;
         this.boundingDims.size = size;
+        this.$module.scene.getViewportPlaneAxes();
         this.$nextTick(() => this.restoreSettings(options) );
         this.isReady = true;
       };
