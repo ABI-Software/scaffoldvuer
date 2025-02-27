@@ -157,6 +157,39 @@
           </el-col>
         </el-row>
 
+        <el-row :gutter="20" justify="center" align="middle">
+          <el-col :span="auto">
+            <el-button size="small" @click="() => fitBoundingBox=!fitBoundingBox">
+              {{ fitBoundingBox ? 'Unfit' : 'Fit' }} BoundingBox
+            </el-button>
+          </el-col>
+          <el-col :span="auto">
+            <el-button-group>
+              <el-button size="small" @click="createCoordSystem('axes', fitBoundingBox)">
+                Create Axes CoordSystem
+              </el-button>
+              <el-button size="small" @click="createCoordSystem('arrow', fitBoundingBox)">
+                Create Arrow CoordSystem
+              </el-button>
+            </el-button-group>
+          </el-col>
+          <el-col :span="auto">
+            <el-button-group>
+              <el-button size="small" @click="enableCoordSystem(true)">
+                Enable CoordSystem
+              </el-button>
+              <el-button size="small" @click="enableCoordSystem(true, { miniaxes: true })">
+                Enable MiniAxes CoordSystem
+              </el-button>
+            </el-button-group>
+          </el-col>
+          <el-col :span="auto">
+              <el-button size="small" @click="enableCoordSystem(false)">
+                Disable CoordSystem
+              </el-button>
+          </el-col>
+        </el-row>
+
         <el-row justify="center" align="middle">
           <el-col>
             <el-row :gutter="20" justify="center" align="middle">
@@ -390,7 +423,7 @@ export default {
         y_offset: 50,
         width: 128,
         height: 128,
-        align: "top-right",
+        align: "top-left",
       },
       markerLabels: { },
       render: true,
@@ -418,6 +451,7 @@ export default {
       ElIconFolderOpened: shallowRef(ElIconFolderOpened),
       auto: NaN,
       annotator: markRaw(new AnnotationService(`https://mapcore-demo.org/devel/flatmap/v4/annotator`)),
+      fitBoundingBox: false
     };
   },
   watch: {
@@ -473,6 +507,13 @@ export default {
     this.$refs.dropzone.revokeURLs();
   },
   methods: {
+    enableCoordSystem: function (enable, options) {
+      this.$refs.scaffold.enableCoordSystem(enable, options);
+    },
+    createCoordSystem: function (type, fitBoundingBox) {
+      this.$refs.scaffold.enableCoordSystem(false, { erase: true });
+      this.$refs.scaffold.createCoordSystem(type, fitBoundingBox);
+    },
     exportGLTF: function () {
       this.$refs.scaffold.exportGLTF(false).then((data) => {
         const filename = 'export' + JSON.stringify(new Date()) + '.gltf';
