@@ -157,6 +157,49 @@
           </el-col>
         </el-row>
 
+        <el-row :gutter="20" justify="center" align="middle">
+          <el-col :span="auto">
+            <el-button size="small" @click="updateAlignType('axis')">
+              Align Camera With Axis
+            </el-button>
+          </el-col>
+          <el-col :span="auto">
+            <el-button size="small" @click="updateAlignType('dirction')">
+              Align Camera With Direction
+            </el-button>
+          </el-col>
+          <el-col :span="auto">
+            <el-button-group>
+              <el-button size="small" @click="alignCameraWith('front')">
+                Front Plane
+              </el-button>
+              <el-button size="small" @click="alignCameraWith('back')">
+                Back Plane
+              </el-button>
+            </el-button-group>
+          </el-col>
+          <el-col :span="auto">
+            <el-button-group>
+              <el-button size="small" @click="alignCameraWith('left')">
+                Left Plane
+              </el-button>
+              <el-button size="small" @click="alignCameraWith('right')">
+                Right Plane
+              </el-button>
+            </el-button-group>
+          </el-col>
+          <el-col :span="auto">
+            <el-button-group>
+              <el-button size="small" @click="alignCameraWith('up')">
+                Up Plane
+              </el-button>
+              <el-button size="small" @click="alignCameraWith('down')">
+                Down Plane
+              </el-button>
+            </el-button-group>
+          </el-col>
+        </el-row>
+
         <el-row justify="center" align="middle">
           <el-col>
             <el-row :gutter="20" justify="center" align="middle">
@@ -418,6 +461,15 @@ export default {
       ElIconFolderOpened: shallowRef(ElIconFolderOpened),
       auto: NaN,
       annotator: markRaw(new AnnotationService(`https://mapcore-demo.org/devel/flatmap/v4/annotator`)),
+      alignType: 'axis',
+      planeAxes: {
+        front: [0, 0, -1],
+        back: [0, 0, 1],
+        left: [-1, 0, 0],
+        right: [1, 0, 0],
+        up: [0, 1, 0],
+        down: [0, -1, 0]
+      }
     };
   },
   watch: {
@@ -473,6 +525,16 @@ export default {
     this.$refs.dropzone.revokeURLs();
   },
   methods: {
+    updateAlignType: function (value) {
+      this.alignType = value;
+    },
+    alignCameraWith: function (type) {
+      if (this.alignType === 'axis') {
+        this.$refs.scaffold.alignCameraWithAxis(this.planeAxes[type]);
+      } else {
+        this.$refs.scaffold.alignCameraWithDirection(type);
+      }
+    },
     exportGLTF: function () {
       this.$refs.scaffold.exportGLTF(false).then((data) => {
         const filename = 'export' + JSON.stringify(new Date()) + '.gltf';
