@@ -139,7 +139,7 @@ export default {
   data: function () {
     return {
       display: false,
-      annotationEntry: { },
+      annotationEntry: [],
       ElIconDelete: shallowRef(ElIconDelete),
     };
   },
@@ -160,18 +160,18 @@ export default {
         this.display = true;
         if (this.annotationDisplay) {
           const region = this.region ? this.region +"/" : "";
-          this.annotationEntry = {
+          this.annotationEntry.push({
             "featureId": region + this.label,
             "resourceId": this.scaffoldUrl,
             "resource": this.scaffoldUrl,
             "feature": this.annotationFeature,
             "offline": this.offlineAnnotationEnabled,
-          };
+          });
         }
       }
       else {
         this.display = false;
-        this.annotationEntry = { };
+        this.annotationEntry = [];
       }
     },
     hideTriggered: function() {
