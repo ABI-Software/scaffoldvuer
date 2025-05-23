@@ -360,7 +360,7 @@
             </template>
           </el-popover>
         </el-row>
-        <el-row>
+        <el-row v-if="showLocalSettings">
           <el-popover
             :visible="hoverVisibilities[4].value"
             content="Change background color"
@@ -705,6 +705,14 @@ export default {
     flatmapAPI: {
       type: String,
       default: "https://mapcore-demo.org/current/flatmap/v3/"
+    },
+    /**
+     * The option to show local settings UI
+     * (background colour, viewing mode, etc.)
+     */
+    showLocalSettings: {
+      type: Boolean,
+      default: true,
     },
   },
   provide() {
