@@ -1810,34 +1810,32 @@ export default {
             this.$emit("scaffold-selected", event.identifiers);
           }
         } else if (event.eventType == 2) {
-          if (this.selectedObjects.length === 0) {
-            this.hideRegionTooltip();
-            if (this.$refs.scaffoldTreeControls) {
-              if (names.length > 0) {
-                this.$refs.scaffoldTreeControls.updateHoverUI(zincObjects);
-              } else {
-                this.$refs.scaffoldTreeControls.removeHover(true);
-              }
+          this.hideRegionTooltip();
+          if (this.$refs.scaffoldTreeControls) {
+            if (names.length > 0) {
+              this.$refs.scaffoldTreeControls.updateHoverUI(zincObjects);
+            } else {
+              this.$refs.scaffoldTreeControls.removeHover(true);
             }
-            if (event.identifiers.length > 0 && event.identifiers[0]) {
-              if (event.identifiers[0].coords) {
-                this.tData.active = false;
-                if (this.viewingMode !== "Annotation" ||  !this.annotationSidebar) {
-                  this.tData.visible = true;
-                }
-                this.tData.label = id;
-                this.tData.region = regionPath;
-                this.tData.x = event.identifiers[0].coords.x;
-                this.tData.y = event.identifiers[0].coords.y;
-                this.createEditTemporaryLines(event.identifiers);
-              }
-            }
-            /**
-             * Emit when an object is highlighted
-             * @arg {Object} "Identifier of selected objects"
-             */
-            this.$emit("scaffold-highlighted", event.identifiers);
           }
+          if (event.identifiers.length > 0 && event.identifiers[0]) {
+            if (event.identifiers[0].coords) {
+              this.tData.active = false;
+              if (this.viewingMode !== "Annotation" ||  !this.annotationSidebar) {
+                this.tData.visible = true;
+              }
+              this.tData.label = id;
+              this.tData.region = regionPath;
+              this.tData.x = event.identifiers[0].coords.x;
+              this.tData.y = event.identifiers[0].coords.y;
+              this.createEditTemporaryLines(event.identifiers);
+            }
+          }
+          /**
+           * Emit when an object is highlighted
+           * @arg {Object} "Identifier of selected objects"
+           */
+          this.$emit("scaffold-highlighted", event.identifiers);
         } else if (event.eventType == 3) {
           //MOVE
           if (event.identifiers.length > 0 && event.identifiers[0]) {
