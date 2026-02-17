@@ -1,6 +1,7 @@
 <template>
   <div class="tree-controls" :class="{ open: drawerOpen, close: !drawerOpen }">
     <div class="traditional-container">
+      <slot name="treeSlot"></slot>
       <TreeControls
         mapType="scaffold"
         title="Regions"

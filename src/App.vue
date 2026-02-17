@@ -38,7 +38,8 @@
         @zinc-object-added="objectAdded"
         @vue:mounted="viewerMounted"
         :usageConfig="usageConfig"
-      />
+      >
+      </ScaffoldVuer>
     </drop-zone>
 
     <HelpModeDialog

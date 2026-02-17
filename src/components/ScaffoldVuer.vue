@@ -110,7 +110,11 @@
             @object-selected="objectSelected"
             @object-hovered="objectHovered"
             @drawer-toggled="drawerToggled"
-          />
+          >
+          <template v-slot:treeSlot>
+            <slot name="treeSlot"></slot>
+          </template>
+          </ScaffoldTreeControls>
         </template>
       </el-popover>
       <div class="primitive-controls-box">
