@@ -112,6 +112,7 @@
             'Show or hide the regions of the scaffold using the checkboxes. Click on a region name to select it.',
           placement: 'right',
           onEnter: openHelpModeRegions,
+          onLeave: restoreHelpModeRegions,
         }"
         :isReady="isReady"
         :containerHeight="clientHeight"
@@ -2297,7 +2298,19 @@ export default {
      */
     openHelpModeRegions: function () {
       const treeControls = this.$refs.scaffoldTreeControls;
-      if (treeControls && !treeControls.drawerOpen) treeControls.toggleDrawer();
+      if (treeControls && !treeControls.drawerOpen) {
+        // Remember to close it again, see `restoreHelpModeRegions`
+        this.helpModeRegionsOpened = true;
+        treeControls.toggleDrawer();
+      }
+    },
+    /**
+     * Close the regions drawer again if it was opened for its help.
+     */
+    restoreHelpModeRegions: function () {
+      const treeControls = this.$refs.scaffoldTreeControls;
+      if (this.helpModeRegionsOpened && treeControls?.drawerOpen) treeControls.toggleDrawer();
+      this.helpModeRegionsOpened = false;
     },
     /**
      * Callback function used by showRegionTooltip in the case when the tooltip
