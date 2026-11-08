@@ -287,12 +287,8 @@
           width="max-content"
           popper-class="scaffold-popper non-selectable"
           ref="zoomFitPopover"
+          content="Fit to view"
         >
-          <div>
-            Fit to
-            <br />
-            view
-          </div>
           <template #reference>
             <map-svg-icon
               icon="fitWindow"
