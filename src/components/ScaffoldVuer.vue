@@ -243,7 +243,8 @@
                 id: 'scaffold-zoom-in',
                 area: 'zoom',
                 title: 'Zoom in',
-                description: 'Zoom in to see more detail. You can also scroll on the scaffold.',
+                description:
+                  'Zoom in to see more detail. You can also scroll, or pinch open on a touch screen.',
                 placement: 'left',
               }"
               @click="zoomIn()"
@@ -269,7 +270,8 @@
                 id: 'scaffold-zoom-out',
                 area: 'zoom',
                 title: 'Zoom out',
-                description: 'Zoom out to see more of the scaffold.',
+                description:
+                  'Zoom out to see more. You can also scroll, or pinch closed on a touch screen.',
                 placement: 'top',
               }"
               @click="zoomOut()"
@@ -285,12 +287,8 @@
           width="max-content"
           popper-class="scaffold-popper non-selectable"
           ref="zoomFitPopover"
+          content="Fit to view"
         >
-          <div>
-            Fit to
-            <br />
-            window
-          </div>
           <template #reference>
             <map-svg-icon
               icon="fitWindow"
@@ -298,8 +296,8 @@
               v-help-mode="{
                 id: 'scaffold-zoom-fit',
                 area: 'zoom',
-                title: 'Fit to window',
-                description: 'Reset the view so the whole scaffold fits in the window.',
+                title: 'Fit to view',
+                description: 'Reset the zoom and position so everything fits in this view.',
                 placement: 'top',
               }"
               @click="fitWindow()"
