@@ -92,6 +92,36 @@ const createGLTFURL = (content, binary) => {
   };
 };
 
+const isPLYFile = (file) => /\.ply$/i.test(file.name);
+
+//Wrap dropped PLY files in an in-memory metadata file so they are read
+//through the regular metadata path. ZincJS presents PLY files with faces as
+//surfaces and PLY files with vertices only as points.
+const createPLYMetadataURL = (plyFiles) => {
+  const objectURLs = [];
+  const filesMapping = {};
+  const data = plyFiles.map((file) => {
+    const objectURL = URL.createObjectURL(file);
+    objectURLs.push(objectURL);
+    filesMapping[objectURL] = file.name;
+    return {
+      Type: 'Surfaces',
+      FileFormat: 'PLY',
+      URL: objectURL,
+      GroupName: file.name.replace(/\.ply$/i, ''),
+    };
+  });
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const metaURL = URL.createObjectURL(blob);
+  objectURLs.push(metaURL);
+  return {
+    objectURLs,
+    filesMapping,
+    url: metaURL,
+    format: 'metadata',
+  };
+};
+
 const createURLFromFiles = async (flatarray) => {
   let list = {};
   let rootPath = '';
@@ -117,7 +147,8 @@ const createURLFromFiles = async (flatarray) => {
   }
   if (metadata) {
     flatarray.forEach(([filePath, file]) => {
-      if (file.name.match(/\.(json)$/)) {
+      //PLY files may be referenced by metadata with FileFormat set to PLY
+      if (file.name.match(/\.(json)$/) || isPLYFile(file)) {
         const relativePath = getRelativePath(rootPath, filePath);
         list[relativePath] = file;
       }
@@ -137,6 +168,10 @@ const createURLFromFiles = async (flatarray) => {
   }
   if (gltf) {
     return createGLTFURL(gltf.file, binary);
+  }
+  const plyFiles = flatarray.map(([, file]) => file).filter(isPLYFile);
+  if (plyFiles.length > 0) {
+    return createPLYMetadataURL(plyFiles);
   }
 };
 
