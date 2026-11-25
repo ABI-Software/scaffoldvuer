@@ -80,15 +80,42 @@ const createNiftiURL = (content, zipped) => {
   return url;
 };
 
-const createGLTFURL = (content, binary) => {
-  let type = binary ? 'model/gltf+binary' : 'model/gltf+json';
-  let blob = new Blob([content], { type });
-  const gltfURL = URL.createObjectURL(blob);
-  const objectURLs = [gltfURL];
+const isPLYFile = (file) => /\.ply$/i.test(file.name);
+
+const isGLTFFile = (file) => /\.(gltf|glb)$/i.test(file.name);
+
+//Wrap dropped PLY and glTF files in an in-memory metadata file so they are
+//read through the regular metadata path. ZincJS presents PLY files with faces
+//as surfaces and PLY files with vertices only as points, the regions and
+//objects of glTF files come from the files themselves.
+const createFilesMetadataURL = (files) => {
+  const objectURLs = [];
+  const filesMapping = {};
+  const data = files.map((file) => {
+    const objectURL = URL.createObjectURL(file);
+    objectURLs.push(objectURL);
+    filesMapping[objectURL] = file.name;
+    if (isGLTFFile(file)) {
+      return {
+        Type: 'glTF',
+        URL: objectURL,
+      };
+    }
+    return {
+      Type: 'Surfaces',
+      FileFormat: 'PLY',
+      URL: objectURL,
+      GroupName: file.name.replace(/\.ply$/i, ''),
+    };
+  });
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const metaURL = URL.createObjectURL(blob);
+  objectURLs.push(metaURL);
   return {
     objectURLs,
-    url: gltfURL,
-    format: 'gltf',
+    filesMapping,
+    url: metaURL,
+    format: 'metadata',
   };
 };
 
@@ -96,28 +123,18 @@ const createURLFromFiles = async (flatarray) => {
   let list = {};
   let rootPath = '';
   let metadata = undefined;
-  let gltf = undefined;
-  let binary = false;
   for (let i = 0; i < flatarray.length; i++) {
     if (flatarray[i][1].name.includes('metadata.json')) {
       rootPath = flatarray[i][0].replace(flatarray[i][1].name, '');
       metadata = { rootPath, file: flatarray[i][1] };
       break;
     }
-    if (flatarray[i][1].name.includes('.glb')) {
-      gltf = { rootPath, file: flatarray[i][1] };
-      binary = true;
-      break;
-    }
-    if (flatarray[i][1].name.includes('.gltf')) {
-      gltf = { rootPath, file: flatarray[i][1] };
-      binary = false;
-      break;
-    }
   }
   if (metadata) {
     flatarray.forEach(([filePath, file]) => {
-      if (file.name.match(/\.(json)$/)) {
+      //PLY and glTF files may be referenced by metadata with FileFormat set
+      //to PLY and Type set to glTF respectively
+      if (file.name.match(/\.(json)$/) || isPLYFile(file) || isGLTFFile(file)) {
         const relativePath = getRelativePath(rootPath, filePath);
         list[relativePath] = file;
       }
@@ -135,8 +152,11 @@ const createURLFromFiles = async (flatarray) => {
       console.error('Fetch failed:', error);
     }
   }
-  if (gltf) {
-    return createGLTFURL(gltf.file, binary);
+  const files = flatarray
+    .map(([, file]) => file)
+    .filter((file) => isPLYFile(file) || isGLTFFile(file));
+  if (files.length > 0) {
+    return createFilesMetadataURL(files);
   }
 };
 

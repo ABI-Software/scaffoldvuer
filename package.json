@@ -59,7 +59,7 @@
     "simple-dropzone": "^0.8.3",
     "vue": "^3.5.41",
     "vue-router": "^5.2.0",
-    "zincjs": "^3.0.2"
+    "zincjs": "^3.0.3"
   },
   "devDependencies": {
     "@babel/eslint-parser": "^8.0.1",
